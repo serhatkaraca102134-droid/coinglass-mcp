@@ -1,42 +1,46 @@
-import express from "express";
-import fetch from "node-fetch";
+import { createServer } from "@modelcontextprotocol/server-http";
+import { Tool } from "@modelcontextprotocol/sdk/types.js";
+import { fetch } from "undici";
 
-const app = express();
-const PORT = process.env.PORT || 3000;
+const SERVER_NAME = "coinglass-mcp";
+const SERVER_VERSION = "1.0.0";
 
-// MCP bilgisi
-const mcpMeta = {
-  name: "coinglass-server",
-  description: "CoinGlass verilerini ChatGPT'ye açan MCP sunucusu",
-  version: "1.0.0"
-};
+// CoinGlass'tan fiyatları çeken tool
+const coinglassMarketTool = {
+  name: "coinglass-market",
+  description: "CoinGlass spot fiyatlarını getirir.",
+  inputSchema: {
+    type: "object",
+    properties: {},
+    required: []
+  },
+  async invoke() {
+    const apiKey = process.env.COINGLASS_API_KEY;
+    if (!apiKey) {
+      return { content: [{ type: "text", text: "COINGLASS_API_KEY yok" }] };
+    }
 
-// CoinGlass fiyatları
-app.get("/mcp/tools/coinglass/market", async (req, res) => {
-  try {
-    const response = await fetch("https://open-api.coinglass.com/public/v2/spot_exchange_rate", {
+    const resp = await fetch("https://open-api.coinglass.com/public/v2/spot_exchange_rate", {
       headers: {
         "accept": "application/json",
-        "coinglassSecret": process.env.COINGLASS_API_KEY
+        "coinglassSecret": apiKey
       }
     });
 
-    const data = await response.json();
-    res.json({
-      type: "mcp/tool-response",
-      tool: "coinglass-market",
-      data: data
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const data = await resp.json();
+    return { content: [{ type: "json", json: data }] };
   }
-});
+};
 
-// ChatGPT için manifest
-app.get("/mcp/manifest.json", (req, res) => {
-  res.json(mcpMeta);
-});
-
-app.listen(PORT, () => {
-  console.log(`✅ MCP sunucusu ${PORT} portunda çalışıyor`);
+// MCP server başlat
+const port = process.env.PORT || 3000;
+createServer(
+  {
+    name: SERVER_NAME,
+    version: SERVER_VERSION,
+    tools: [coinglassMarketTool]
+  },
+  { port: Number(port) }
+).then(() => {
+  console.log(`✅ MCP server ${port} portunda çalışıyor`);
 });
